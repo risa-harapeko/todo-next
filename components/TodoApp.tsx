@@ -53,27 +53,24 @@ const CATEGORY_IDS: Category[] = ["work", "home", "kids"];
 // カテゴリごとの表示。色だけに頼らず、アイコンと文字でも区別する
 const CATEGORIES: Record<
   Category,
-  { label: string; Icon: () => ReactElement; badge: string; chip: string }
+  { label: string; Icon: () => ReactElement; iconColor: string; chip: string }
 > = {
   work: {
     label: "仕事",
     Icon: BriefcaseIcon,
-    badge:
-      "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100",
+    iconColor: "text-blue-700 dark:text-blue-300",
     chip: "peer-checked:border-blue-700 peer-checked:bg-blue-50 peer-checked:text-blue-900 dark:peer-checked:border-blue-400 dark:peer-checked:bg-blue-950 dark:peer-checked:text-blue-100",
   },
   home: {
     label: "家",
     Icon: HouseIcon,
-    badge:
-      "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100",
+    iconColor: "text-emerald-700 dark:text-emerald-300",
     chip: "peer-checked:border-emerald-700 peer-checked:bg-emerald-50 peer-checked:text-emerald-900 dark:peer-checked:border-emerald-400 dark:peer-checked:bg-emerald-950 dark:peer-checked:text-emerald-100",
   },
   kids: {
     label: "子ども",
     Icon: ChildIcon,
-    badge:
-      "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-100",
+    iconColor: "text-orange-700 dark:text-orange-300",
     chip: "peer-checked:border-orange-700 peer-checked:bg-orange-50 peer-checked:text-orange-900 dark:peer-checked:border-orange-400 dark:peer-checked:bg-orange-950 dark:peer-checked:text-orange-100",
   },
 };
@@ -181,9 +178,10 @@ function DueBadge({
 }) {
   const date = formatDue(dueDate);
   // 完了済みのタスクは急かさず、日付だけ出す
+  // 「期限切れ」「今日まで」だけは塗りつぶし＋太字で目立たせる
   if (!done && dueDate < today) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-red-700 bg-red-50 px-2.5 py-0.5 text-base font-bold text-red-800 dark:border-red-400 dark:bg-red-950 dark:text-red-100">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-red-700 px-2 py-0.5 text-base font-bold text-white dark:bg-red-400 dark:text-zinc-950">
         <AlertIcon />
         期限切れ
         <span className="font-medium">{date}</span>
@@ -192,15 +190,17 @@ function DueBadge({
   }
   if (!done && dueDate === today) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-amber-600 bg-amber-50 px-2.5 py-0.5 text-base font-bold text-amber-900 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-200 px-2 py-0.5 text-base font-bold text-amber-950 dark:bg-amber-300 dark:text-zinc-950">
         <ClockIcon />
         今日まで
       </span>
     );
   }
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-300 bg-white px-2.5 py-0.5 text-base font-medium text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
-      <CalendarIcon />
+    <span className="inline-flex shrink-0 items-center gap-1 text-base text-zinc-700 dark:text-zinc-300">
+      <span className="text-zinc-500 dark:text-zinc-400">
+        <CalendarIcon />
+      </span>
       {date}まで
     </span>
   );
@@ -265,12 +265,13 @@ function ChildIcon() {
 }
 
 function CategoryBadge({ category }: { category: Category }) {
-  const { label, Icon, badge } = CATEGORIES[category];
+  const { label, Icon, iconColor } = CATEGORIES[category];
+  // 枠なしの控えめな表示。アイコンだけカテゴリの色にする
   return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-base font-medium ${badge}`}
-    >
-      <Icon />
+    <span className="inline-flex shrink-0 items-center gap-1 text-base text-zinc-700 dark:text-zinc-300">
+      <span className={iconColor}>
+        <Icon />
+      </span>
       {label}
     </span>
   );
@@ -452,234 +453,232 @@ export default function TodoApp() {
         やることリスト
       </h1>
 
-      {/* 入力欄 + 追加ボタン */}
-      <div className="mb-4 flex gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="やることを入力"
-          aria-label="やること"
-          enterKeyHint="done"
-          className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder:text-zinc-400 dark:focus:border-blue-400"
-        />
-        <button
-          type="button"
-          onClick={addTodo}
-          disabled={!trimmed}
-          className="min-h-12 shrink-0 cursor-pointer rounded-xl bg-blue-700 px-5 text-base font-bold text-white transition hover:bg-blue-800 active:scale-95 active:bg-blue-900 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 disabled:active:scale-100 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-400"
-        >
-          追加
-        </button>
-      </div>
-
-      {/* 期日（なくても OK） */}
-      <div className="mb-4">
-        <label
-          htmlFor="due-date"
-          className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
-        >
-          期日<span className="font-normal">（なくても OK）</span>
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* 追加エリア：うすい背景のカードにまとめる */}
+      <section
+        aria-label="タスクを追加"
+        className="mb-12 rounded-2xl bg-zinc-100 p-4 sm:p-6 dark:bg-zinc-900"
+      >
+        {/* 入力欄 + 追加ボタン */}
+        <div className="mb-5 flex gap-2">
           <input
-            id="due-date"
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="min-h-12 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="やることを入力"
+            aria-label="やること"
+            enterKeyHint="done"
+            className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-400 dark:focus:border-blue-400"
           />
-          {dueDate && (
-            <button
-              type="button"
-              onClick={() => setDueDate("")}
-              className="min-h-11 min-w-11 cursor-pointer rounded-xl px-4 text-base font-medium text-zinc-700 underline underline-offset-4 transition hover:bg-zinc-100 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              期日をなしにする
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={addTodo}
+            disabled={!trimmed}
+            className="min-h-12 shrink-0 cursor-pointer rounded-xl bg-blue-700 px-5 text-base font-bold text-white transition hover:bg-blue-800 active:scale-95 active:bg-blue-900 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 disabled:active:scale-100 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-400"
+          >
+            追加
+          </button>
         </div>
-      </div>
 
-      {/* 追加するタスクのカテゴリ（1つ選ぶ） */}
-      <fieldset className="mb-8">
-        <legend className="mb-2 text-base font-medium text-zinc-800 dark:text-zinc-200">
-          カテゴリ
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {CATEGORY_IDS.map((id) => {
-            const { label, Icon, chip } = CATEGORIES[id];
-            const selected = category === id;
-            return (
-              <label key={id} className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="category"
-                  value={id}
-                  checked={selected}
-                  onChange={() => setCategory(id)}
-                  className="peer sr-only"
-                />
-                <span
-                  className={`flex min-h-11 items-center gap-1.5 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base font-medium text-zinc-800 transition-colors hover:border-zinc-500 peer-checked:font-bold peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 ${chip}`}
-                >
-                  <Icon />
-                  {label}
-                  {/* 選択中は色に加えてチェックマークでも示す */}
-                  {selected && <CheckIcon />}
-                </span>
-              </label>
-            );
-          })}
+        {/* 期日（なくても OK） */}
+        <div className="mb-5">
+          <label
+            htmlFor="due-date"
+            className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
+          >
+            期日<span className="font-normal">（なくても OK）</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id="due-date"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="min-h-12 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
+            />
+            {dueDate && (
+              <button
+                type="button"
+                onClick={() => setDueDate("")}
+                className="min-h-11 min-w-11 cursor-pointer rounded-xl px-4 text-base font-medium text-zinc-700 underline underline-offset-4 transition hover:bg-zinc-200 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                期日をなしにする
+              </button>
+            )}
+          </div>
         </div>
-      </fieldset>
+
+        {/* 追加するタスクのカテゴリ（1つ選ぶ） */}
+        <fieldset>
+          <legend className="mb-2 text-base font-medium text-zinc-800 dark:text-zinc-200">
+            カテゴリ
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORY_IDS.map((id) => {
+              const { label, Icon, chip } = CATEGORIES[id];
+              const selected = category === id;
+              return (
+                <label key={id} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="category"
+                    value={id}
+                    checked={selected}
+                    onChange={() => setCategory(id)}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={`flex min-h-11 items-center gap-1.5 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base font-medium text-zinc-800 transition-colors hover:border-zinc-500 peer-checked:font-bold peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-200 ${chip}`}
+                  >
+                    <Icon />
+                    {label}
+                    {/* 選択中は色に加えてチェックマークでも示す */}
+                    {selected && <CheckIcon />}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      </section>
 
       {/* タスク一覧（読み込みが終わるまでは何も出さない） */}
-      {loaded &&
-        (todos.length === 0 ? (
-          <p className="py-12 text-center text-base text-zinc-600 dark:text-zinc-400">
-            まだタスクはありません
-          </p>
-        ) : (
-          <>
-            {/* 絞り込みボタン */}
-            <div
-              role="group"
-              aria-label="カテゴリで絞り込み"
-              className="mb-4 flex flex-wrap gap-2"
-            >
-              {filterOptions.map(({ id, label }) => {
-                const active = filter === id;
-                const Icon = id === "all" ? null : CATEGORIES[id].Icon;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setFilter(id)}
-                    aria-pressed={active}
-                    className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-full border-2 px-4 text-base font-medium transition active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-                      active
-                        ? "border-zinc-900 bg-zinc-900 font-bold text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                        : "border-zinc-300 bg-white text-zinc-800 hover:border-zinc-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-                    }`}
-                  >
-                    {Icon && <Icon />}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 並び順 */}
-            <div
-              role="group"
-              aria-label="並び順"
-              className="mb-4 flex flex-wrap items-center gap-2"
-            >
-              <span className="text-base text-zinc-700 dark:text-zinc-300">
-                並び順：
-              </span>
-              {(
-                [
-                  { id: "added", label: "追加順" },
-                  { id: "due", label: "期日が近い順" },
-                ] as const
-              ).map(({ id, label }) => {
-                const active = sortOrder === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => changeSortOrder(id)}
-                    aria-pressed={active}
-                    className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-xl border-2 px-4 text-base font-medium transition active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-                      active
-                        ? "border-zinc-900 bg-zinc-900 font-bold text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                        : "border-zinc-300 bg-white text-zinc-800 hover:border-zinc-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-                    }`}
-                  >
-                    {active && <CheckIcon />}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {visibleTodos.length === 0 ? (
-              <p className="py-12 text-center text-base text-zinc-600 dark:text-zinc-400">
-                「{filterOptions.find((f) => f.id === filter)?.label}
-                」のタスクはありません
-              </p>
-            ) : (
-              <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                {visibleTodos.map((todo) => (
-                  <li key={todo.id} className="flex items-center gap-2 py-2">
-                    {/* チェックボックスと文字全体が押せる範囲 */}
-                    <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2">
-                      <input
-                        type="checkbox"
-                        checked={todo.done}
-                        onChange={() => toggleTodo(todo.id)}
-                        className="peer sr-only"
-                      />
-                      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg peer-focus-visible:outline-3 peer-focus-visible:outline-blue-600">
-                        <span
-                          className={`flex size-7 items-center justify-center rounded-md border-2 transition-colors ${
-                            todo.done
-                              ? "border-blue-700 bg-blue-700 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950"
-                              : "border-zinc-500 bg-white hover:border-blue-700 dark:border-zinc-400 dark:bg-zinc-900"
-                          }`}
-                        >
-                          {todo.done && <CheckIcon />}
-                        </span>
-                      </span>
-                      <span className="flex min-w-0 flex-1 flex-col items-start gap-1 py-1">
-                        {/* 既存のカテゴリなし・期日なしタスクはバッジを出さない */}
-                        {(todo.category || todo.dueDate) && (
-                          <span className="flex flex-wrap gap-1.5">
-                            {todo.category && (
-                              <CategoryBadge category={todo.category} />
-                            )}
-                            {todo.dueDate && today && (
-                              <DueBadge
-                                dueDate={todo.dueDate}
-                                today={today}
-                                done={todo.done}
-                              />
-                            )}
-                          </span>
-                        )}
-                        <span
-                          className={`min-w-0 break-words text-base leading-relaxed ${
-                            todo.done
-                              ? "text-zinc-600 line-through decoration-2 dark:text-zinc-400"
-                              : "text-zinc-900 dark:text-zinc-50"
-                          }`}
-                        >
-                          {todo.text}
-                        </span>
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => deleteTodo(todo.id)}
-                      aria-label={`「${todo.text}」を削除`}
-                      className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-3 text-base font-medium text-red-700 transition hover:bg-red-50 active:scale-95 active:bg-red-100 focus-visible:outline-3 focus-visible:outline-red-600 dark:text-red-300 dark:hover:bg-red-950 dark:active:bg-red-900"
-                    >
-                      <TrashIcon />
-                      <span>削除</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-6 text-right text-base text-zinc-700 dark:text-zinc-300">
-              残り {remaining} 件
+      <section aria-labelledby="list-heading">
+        <h2
+          id="list-heading"
+          className="mb-3 text-xl font-bold text-zinc-900 dark:text-zinc-50"
+        >
+          タスク一覧
+        </h2>
+        {loaded &&
+          (todos.length === 0 ? (
+            <p className="py-12 text-center text-base text-zinc-600 dark:text-zinc-400">
+              まだタスクはありません
             </p>
-          </>
-        ))}
+          ) : (
+            <>
+              {/* 絞り込みタブ：選択中は下線＋太字で示す */}
+              <div
+                role="group"
+                aria-label="カテゴリで絞り込み"
+                className="flex border-b border-zinc-300 dark:border-zinc-700"
+              >
+                {filterOptions.map(({ id, label }) => {
+                  const active = filter === id;
+                  const Icon = id === "all" ? null : CATEGORIES[id].Icon;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setFilter(id)}
+                      aria-pressed={active}
+                      className={`-mb-px flex min-h-12 min-w-11 flex-1 cursor-pointer items-center justify-center gap-1 border-b-4 px-1 text-base transition-colors focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-blue-600 ${
+                        active
+                          ? "border-zinc-900 font-bold text-zinc-900 dark:border-zinc-50 dark:text-zinc-50"
+                          : "border-transparent font-normal text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+                      }`}
+                    >
+                      {Icon && <Icon />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 並び順（小さなプルダウン） */}
+              <div className="flex items-center justify-end gap-2 py-2">
+                <label
+                  htmlFor="sort-order"
+                  className="text-base text-zinc-700 dark:text-zinc-300"
+                >
+                  並び順
+                </label>
+                <select
+                  id="sort-order"
+                  value={sortOrder}
+                  onChange={(e) => changeSortOrder(e.target.value as SortOrder)}
+                  className="min-h-11 cursor-pointer rounded-lg border border-zinc-300 bg-white px-2 text-base text-zinc-900 outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50 dark:[color-scheme:dark]"
+                >
+                  <option value="added">追加順</option>
+                  <option value="due">期日が近い順</option>
+                </select>
+              </div>
+
+              {visibleTodos.length === 0 ? (
+                <p className="py-12 text-center text-base text-zinc-600 dark:text-zinc-400">
+                  「{filterOptions.find((f) => f.id === filter)?.label}
+                  」のタスクはありません
+                </p>
+              ) : (
+                <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                  {visibleTodos.map((todo) => (
+                    <li key={todo.id} className="flex items-center gap-2 py-2">
+                      {/* チェックボックスと文字全体が押せる範囲 */}
+                      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2">
+                        <input
+                          type="checkbox"
+                          checked={todo.done}
+                          onChange={() => toggleTodo(todo.id)}
+                          className="peer sr-only"
+                        />
+                        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg peer-focus-visible:outline-3 peer-focus-visible:outline-blue-600">
+                          <span
+                            className={`flex size-7 items-center justify-center rounded-md border-2 transition-colors ${
+                              todo.done
+                                ? "border-blue-700 bg-blue-700 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950"
+                                : "border-zinc-500 bg-white hover:border-blue-700 dark:border-zinc-400 dark:bg-zinc-900"
+                            }`}
+                          >
+                            {todo.done && <CheckIcon />}
+                          </span>
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-1 py-1">
+                          {/* 既存のカテゴリなし・期日なしタスクはバッジを出さない */}
+                          {(todo.category || todo.dueDate) && (
+                            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              {todo.category && (
+                                <CategoryBadge category={todo.category} />
+                              )}
+                              {todo.dueDate && today && (
+                                <DueBadge
+                                  dueDate={todo.dueDate}
+                                  today={today}
+                                  done={todo.done}
+                                />
+                              )}
+                            </span>
+                          )}
+                          <span
+                            className={`min-w-0 break-words text-base leading-relaxed ${
+                              todo.done
+                                ? "text-zinc-600 line-through decoration-2 dark:text-zinc-400"
+                                : "text-zinc-900 dark:text-zinc-50"
+                            }`}
+                          >
+                            {todo.text}
+                          </span>
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => deleteTodo(todo.id)}
+                        aria-label={`「${todo.text}」を削除`}
+                        className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-3 text-base font-medium text-red-700 transition hover:bg-red-50 active:scale-95 active:bg-red-100 focus-visible:outline-3 focus-visible:outline-red-600 dark:text-red-300 dark:hover:bg-red-950 dark:active:bg-red-900"
+                      >
+                        <TrashIcon />
+                        <span>削除</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-6 text-right text-base text-zinc-700 dark:text-zinc-300">
+                残り {remaining} 件
+              </p>
+            </>
+          ))}
+      </section>
 
       {/* 短いお知らせ（トースト）。読み上げソフトにも伝わるよう aria-live を付ける */}
       <div
