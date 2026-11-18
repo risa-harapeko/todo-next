@@ -418,6 +418,23 @@ function CategoryBadge({ category }: { category: Category }) {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0 transition-transform group-open:rotate-90"
+      aria-hidden="true"
+    >
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg
@@ -465,6 +482,8 @@ export default function TodoApp() {
   // 「今日」はブラウザ側で決める（サーバーとの時刻差・日付またぎに対応）
   const [today, setToday] = useState("");
   const [estimate, setEstimate] = useState(""); // "" は見積もりなし
+  // 追加エリアの「詳細（期日・時間）」を開いているか
+  const [showDetails, setShowDetails] = useState(false);
   // 経過時間の表示用の「現在時刻」。計測中だけ 1 秒ごとに進める
   const [now, setNow] = useState(0);
   // localStorage の読み込みが終わるまで保存しないためのフラグ
@@ -597,6 +616,9 @@ export default function TodoApp() {
       }),
     );
     setNow(ts);
+    // 完了にすると「完了済み」へ移動するので、ひと言知らせる
+    const target = todos.find((t) => t.id === id);
+    if (target && !target.done) showToast("完了済みに移動しました");
   };
 
   // 開始：同時に計測できるのは 1 つだけ。ほかに計測中のタスクがあれば止める
@@ -629,7 +651,10 @@ export default function TodoApp() {
     filter === "all" ? todos : todos.filter((t) => t.category === filter);
   const visibleTodos =
     sortOrder === "due" ? sortByDue(filteredTodos) : filteredTodos;
-  const remaining = visibleTodos.filter((t) => !t.done).length;
+  // 未完了を上に、完了済みは下にまとめる（並び順はそれぞれの中で保つ）
+  const activeTodos = visibleTodos.filter((t) => !t.done);
+  const doneTodos = visibleTodos.filter((t) => t.done);
+  const remaining = activeTodos.length;
 
   // 今日片付けた分：今日完了したタスクの見積もり時間（見積もりなしは実際の時間）
   const doneTodayMin = todos
@@ -645,6 +670,132 @@ export default function TodoApp() {
     { id: "all", label: "すべて" },
     ...CATEGORY_IDS.map((id) => ({ id, label: CATEGORIES[id].label })),
   ];
+
+  // タスク 1 行分。タスク名を上に、カテゴリ・期日・時間をその下に 1 行でまとめ、
+  // 操作ボタン（開始／停止・削除）は右側に横並びにする
+  const renderTodo = (todo: Todo) => {
+    const running = Boolean(todo.startedAt);
+    const spent = elapsedMs(todo, now);
+    const saved = savedMinutes(todo);
+    const hasMeta =
+      todo.category || todo.dueDate || todo.estimateMin || spent > 0;
+    return (
+      // スマホ幅でタスク名の幅が足りないときは、ボタンを次の行の右端に回す
+      <li
+        key={todo.id}
+        className="flex flex-wrap items-start gap-x-2 gap-y-1 py-3"
+      >
+        {/* チェックボックスと文字全体が押せる範囲 */}
+        <label className="flex min-w-52 flex-1 cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={todo.done}
+            onChange={() => toggleTodo(todo.id)}
+            className="peer sr-only"
+          />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-lg peer-focus-visible:outline-3 peer-focus-visible:outline-blue-600">
+            <span
+              className={`flex size-7 items-center justify-center rounded-md border-2 transition-colors ${
+                todo.done
+                  ? "border-blue-700 bg-blue-700 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950"
+                  : "border-zinc-500 bg-white hover:border-blue-700 dark:border-zinc-400 dark:bg-zinc-900"
+              }`}
+            >
+              {todo.done && <CheckIcon />}
+            </span>
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
+            <span
+              className={`min-w-0 break-words text-lg leading-snug font-medium ${
+                todo.done
+                  ? "text-zinc-600 line-through decoration-2 dark:text-zinc-400"
+                  : "text-zinc-900 dark:text-zinc-50"
+              }`}
+            >
+              {todo.text}
+            </span>
+            {/* 既存のタスクで情報がなければ、この行は出さない */}
+            {hasMeta && (
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-zinc-600 dark:text-zinc-400">
+                {todo.category && <CategoryBadge category={todo.category} />}
+                {todo.dueDate && today && (
+                  <DueBadge
+                    dueDate={todo.dueDate}
+                    today={today}
+                    done={todo.done}
+                  />
+                )}
+                {todo.estimateMin && (
+                  <span className="inline-flex items-center gap-1">
+                    <HourglassIcon />
+                    見積 {formatMinutes(todo.estimateMin)}
+                  </span>
+                )}
+                {running ? (
+                  <span
+                    role="timer"
+                    className="inline-flex items-center gap-1 font-bold text-zinc-900 dark:text-zinc-50"
+                  >
+                    <StopwatchIcon />
+                    計測中
+                    <span className="tabular-nums">{formatClock(spent)}</span>
+                  </span>
+                ) : (
+                  spent > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <StopwatchIcon />
+                      実績 {formatSpent(spent)}
+                    </span>
+                  )
+                )}
+                {saved > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-900 dark:bg-emerald-300 dark:text-zinc-950">
+                    <LeafIcon />
+                    {formatMinutes(saved)} 節約！
+                  </span>
+                )}
+              </span>
+            )}
+          </span>
+        </label>
+
+        {/* 操作ボタン：右側に横並び */}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {!todo.done &&
+            (running ? (
+              <button
+                type="button"
+                onClick={() => stopTodoTimer(todo.id)}
+                aria-label={`「${todo.text}」の計測を停止`}
+                className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-lg bg-zinc-900 px-3 text-base font-bold text-white transition hover:bg-zinc-700 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                <StopIcon />
+                停止
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => startTodoTimer(todo.id)}
+                aria-label={`「${todo.text}」の計測を開始`}
+                className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-lg border-2 border-zinc-300 px-3 text-base font-medium text-zinc-800 transition hover:border-zinc-500 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:text-zinc-200 dark:hover:border-zinc-400"
+              >
+                <PlayIcon />
+                開始
+              </button>
+            ))}
+          <button
+            type="button"
+            onClick={() => deleteTodo(todo.id)}
+            aria-label={`「${todo.text}」を削除`}
+            className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-lg px-3 text-base font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 active:bg-zinc-200 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 dark:active:bg-zinc-700"
+          >
+            <TrashIcon />
+            削除
+          </button>
+        </div>
+      </li>
+    );
+  };
 
   return (
     <div className="w-full max-w-xl text-base">
@@ -686,7 +837,7 @@ export default function TodoApp() {
         className="mb-12 rounded-2xl bg-zinc-100 p-4 sm:p-6 dark:bg-zinc-900"
       >
         {/* 入力欄 + 追加ボタン */}
-        <div className="mb-5 flex gap-2">
+        <div className="mb-4 flex gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -708,62 +859,9 @@ export default function TodoApp() {
           </button>
         </div>
 
-        {/* 期日（なくても OK） */}
-        <div className="mb-5">
-          <label
-            htmlFor="due-date"
-            className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
-          >
-            期日<span className="font-normal">（なくても OK）</span>
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              id="due-date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="min-h-12 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
-            />
-            {dueDate && (
-              <button
-                type="button"
-                onClick={() => setDueDate("")}
-                className="min-h-11 min-w-11 cursor-pointer rounded-xl px-4 text-base font-medium text-zinc-700 underline underline-offset-4 transition hover:bg-zinc-200 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                期日をなしにする
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 見積もり時間（なくても OK） */}
-        <div className="mb-5">
-          <label
-            htmlFor="estimate"
-            className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
-          >
-            見積もり時間<span className="font-normal">（なくても OK）</span>
-          </label>
-          <select
-            id="estimate"
-            value={estimate}
-            onChange={(e) => setEstimate(e.target.value)}
-            className="min-h-12 cursor-pointer rounded-xl border-2 border-zinc-300 bg-white px-3 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
-          >
-            <option value="">なし</option>
-            {ESTIMATE_OPTIONS.map((min) => (
-              <option key={min} value={String(min)}>
-                {formatMinutes(min)}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* 追加するタスクのカテゴリ（1つ選ぶ） */}
         <fieldset>
-          <legend className="mb-2 text-base font-medium text-zinc-800 dark:text-zinc-200">
-            カテゴリ
-          </legend>
+          <legend className="sr-only">カテゴリ</legend>
           <div className="flex flex-wrap gap-2">
             {CATEGORY_IDS.map((id) => {
               const { label, Icon, chip } = CATEGORIES[id];
@@ -791,6 +889,85 @@ export default function TodoApp() {
             })}
           </div>
         </fieldset>
+
+        {/* 詳細（期日・見積もり時間）は押したときだけ開く */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3">
+          <button
+            type="button"
+            onClick={() => setShowDetails((v) => !v)}
+            aria-expanded={showDetails}
+            aria-controls="add-details"
+            className="-ml-2 min-h-11 cursor-pointer rounded-lg px-2 text-base font-medium text-zinc-800 underline underline-offset-4 transition hover:bg-zinc-200 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            {showDetails ? "－ 詳細を閉じる" : "＋ 詳細（期日・時間）"}
+          </button>
+          {/* 閉じていても、設定済みの値は見えるようにする */}
+          {!showDetails && (dueDate || estimate) && (
+            <span className="text-base text-zinc-700 dark:text-zinc-300">
+              {[
+                isDateString(dueDate) && `期日 ${formatDue(dueDate)}`,
+                estimate && `見積 ${formatMinutes(Number(estimate))}`,
+              ]
+                .filter(Boolean)
+                .join("・")}
+            </span>
+          )}
+        </div>
+
+        {showDetails && (
+          <div id="add-details" className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
+            {/* 期日（なくても OK） */}
+            <div>
+              <label
+                htmlFor="due-date"
+                className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
+              >
+                期日<span className="font-normal">（なくても OK）</span>
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id="due-date"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="min-h-12 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
+                />
+                {dueDate && (
+                  <button
+                    type="button"
+                    onClick={() => setDueDate("")}
+                    className="min-h-11 min-w-11 cursor-pointer rounded-xl px-3 text-base font-medium text-zinc-700 underline underline-offset-4 transition hover:bg-zinc-200 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    期日をなしにする
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 見積もり時間（なくても OK） */}
+            <div>
+              <label
+                htmlFor="estimate"
+                className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
+              >
+                見積もり時間<span className="font-normal">（なくても OK）</span>
+              </label>
+              <select
+                id="estimate"
+                value={estimate}
+                onChange={(e) => setEstimate(e.target.value)}
+                className="min-h-12 cursor-pointer rounded-xl border-2 border-zinc-300 bg-white px-3 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
+              >
+                <option value="">なし</option>
+                {ESTIMATE_OPTIONS.map((min) => (
+                  <option key={min} value={String(min)}>
+                    {formatMinutes(min)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* タスク一覧（読み込みが終わるまでは何も出さない） */}
@@ -861,143 +1038,34 @@ export default function TodoApp() {
                   」のタスクはありません
                 </p>
               ) : (
-                <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                  {visibleTodos.map((todo) => {
-                    const running = Boolean(todo.startedAt);
-                    const spent = elapsedMs(todo, now);
-                    const saved = savedMinutes(todo);
-                    const showTime =
-                      !todo.done || Boolean(todo.estimateMin) || spent > 0;
-                    return (
-                      <li key={todo.id} className="py-2">
-                        <div className="flex items-center gap-2">
-                          {/* チェックボックスと文字全体が押せる範囲 */}
-                          <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2">
-                            <input
-                              type="checkbox"
-                              checked={todo.done}
-                              onChange={() => toggleTodo(todo.id)}
-                              className="peer sr-only"
-                            />
-                            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg peer-focus-visible:outline-3 peer-focus-visible:outline-blue-600">
-                              <span
-                                className={`flex size-7 items-center justify-center rounded-md border-2 transition-colors ${
-                                  todo.done
-                                    ? "border-blue-700 bg-blue-700 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950"
-                                    : "border-zinc-500 bg-white hover:border-blue-700 dark:border-zinc-400 dark:bg-zinc-900"
-                                }`}
-                              >
-                                {todo.done && <CheckIcon />}
-                              </span>
-                            </span>
-                            <span className="flex min-w-0 flex-1 flex-col items-start gap-1 py-1">
-                              {/* 既存のカテゴリなし・期日なしタスクはバッジを出さない */}
-                              {(todo.category || todo.dueDate) && (
-                                <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                  {todo.category && (
-                                    <CategoryBadge category={todo.category} />
-                                  )}
-                                  {todo.dueDate && today && (
-                                    <DueBadge
-                                      dueDate={todo.dueDate}
-                                      today={today}
-                                      done={todo.done}
-                                    />
-                                  )}
-                                </span>
-                              )}
-                              <span
-                                className={`min-w-0 break-words text-base leading-relaxed ${
-                                  todo.done
-                                    ? "text-zinc-600 line-through decoration-2 dark:text-zinc-400"
-                                    : "text-zinc-900 dark:text-zinc-50"
-                                }`}
-                              >
-                                {todo.text}
-                              </span>
-                            </span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => deleteTodo(todo.id)}
-                            aria-label={`「${todo.text}」を削除`}
-                            className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-3 text-base font-medium text-red-700 transition hover:bg-red-50 active:scale-95 active:bg-red-100 focus-visible:outline-3 focus-visible:outline-red-600 dark:text-red-300 dark:hover:bg-red-950 dark:active:bg-red-900"
-                          >
-                            <TrashIcon />
-                            <span>削除</span>
-                          </button>
-                        </div>
+                <>
+                  {activeTodos.length === 0 ? (
+                    <p className="border-y border-zinc-200 py-8 text-center text-base text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+                      未完了のタスクはありません
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                      {activeTodos.map(renderTodo)}
+                    </ul>
+                  )}
+                  <p className="mt-3 text-right text-base text-zinc-700 dark:text-zinc-300">
+                    残り {remaining} 件
+                  </p>
 
-                        {/* 時間の行：見積もり・実績・節約・開始／停止 */}
-                        {showTime && (
-                          <div className="mt-1 ml-14 flex flex-wrap items-center gap-x-4 gap-y-2">
-                            {todo.estimateMin && (
-                              <span className="inline-flex items-center gap-1 text-base text-zinc-700 dark:text-zinc-300">
-                                <span className="text-zinc-500 dark:text-zinc-400">
-                                  <HourglassIcon />
-                                </span>
-                                見積 {formatMinutes(todo.estimateMin)}
-                              </span>
-                            )}
-                            {running ? (
-                              <span
-                                role="timer"
-                                className="inline-flex items-center gap-1 text-base font-bold text-zinc-900 dark:text-zinc-50"
-                              >
-                                <StopwatchIcon />
-                                計測中
-                                <span className="tabular-nums">
-                                  {formatClock(spent)}
-                                </span>
-                              </span>
-                            ) : (
-                              spent > 0 && (
-                                <span className="inline-flex items-center gap-1 text-base text-zinc-700 dark:text-zinc-300">
-                                  <span className="text-zinc-500 dark:text-zinc-400">
-                                    <StopwatchIcon />
-                                  </span>
-                                  実績 {formatSpent(spent)}
-                                </span>
-                              )
-                            )}
-                            {saved > 0 && (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-base font-bold text-emerald-900 dark:bg-emerald-300 dark:text-zinc-950">
-                                <LeafIcon />
-                                {formatMinutes(saved)} 節約！
-                              </span>
-                            )}
-                            {!todo.done &&
-                              (running ? (
-                                <button
-                                  type="button"
-                                  onClick={() => stopTodoTimer(todo.id)}
-                                  aria-label={`「${todo.text}」の計測を停止`}
-                                  className="ml-auto flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-lg bg-zinc-900 px-4 text-base font-bold text-white transition hover:bg-zinc-700 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-                                >
-                                  <StopIcon />
-                                  停止
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => startTodoTimer(todo.id)}
-                                  aria-label={`「${todo.text}」の計測を開始`}
-                                  className="ml-auto flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-lg border-2 border-zinc-300 px-4 text-base font-medium text-zinc-800 transition hover:border-zinc-500 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:text-zinc-200 dark:hover:border-zinc-400"
-                                >
-                                  <PlayIcon />
-                                  開始
-                                </button>
-                              ))}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                  {/* 完了済みは下にまとめて折りたためるようにする */}
+                  {doneTodos.length > 0 && (
+                    <details className="group mt-6">
+                      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-lg text-lg font-bold text-zinc-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-200 [&::-webkit-details-marker]:hidden">
+                        <ChevronIcon />
+                        完了済み（{doneTodos.length}件）
+                      </summary>
+                      <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                        {doneTodos.map(renderTodo)}
+                      </ul>
+                    </details>
+                  )}
+                </>
               )}
-              <p className="mt-6 text-right text-base text-zinc-700 dark:text-zinc-300">
-                残り {remaining} 件
-              </p>
             </>
           ))}
       </section>
