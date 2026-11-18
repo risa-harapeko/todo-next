@@ -10,6 +10,7 @@ import {
 
 type Category = "work" | "home" | "kids";
 type Filter = "all" | Category;
+type SortOrder = "added" | "due";
 
 type Todo = {
   id: string;
@@ -17,10 +18,35 @@ type Todo = {
   done: boolean;
   // 機能追加前に保存されたタスクにはカテゴリがないので省略可能にする
   category?: Category;
+  // 期日（"YYYY-MM-DD"）。期日なし・既存タスクは省略
+  dueDate?: string;
 };
 
 const STORAGE_KEY = "todo-next:todos";
+const SORT_KEY = "todo-next:sort";
 const TOAST_MS = 2000;
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function isDateString(value: unknown): value is string {
+  return typeof value === "string" && DATE_RE.test(value);
+}
+
+// 端末の時刻で「今日」を "YYYY-MM-DD" にする（UTC だと日本時間の朝にずれるため）
+function todayString(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// "2026-11-25" → "11/25（水）"
+function formatDue(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const weekday = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  return `${m}/${d}（${weekday}）`;
+}
 
 const CATEGORY_IDS: Category[] = ["work", "home", "kids"];
 
@@ -68,9 +94,116 @@ function normalizeTodos(data: unknown[]): Todo[] {
         text: t.text,
         done: t.done === true,
         ...(isCategory(t.category) ? { category: t.category } : {}),
+        ...(isDateString(t.dueDate) ? { dueDate: t.dueDate } : {}),
       },
     ];
   });
+}
+
+// 期日が近い順。期日なしは最後に回し、同じ期日どうしは追加順を保つ
+function sortByDue(list: Todo[]): Todo[] {
+  return list
+    .map((todo, index) => ({ todo, index }))
+    .sort((a, b) => {
+      const da = a.todo.dueDate;
+      const db = b.todo.dueDate;
+      if (da && db && da !== db) return da < db ? -1 : 1;
+      if (da && !db) return -1;
+      if (!da && db) return 1;
+      return a.index - b.index;
+    })
+    .map(({ todo }) => todo);
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0"
+      aria-hidden="true"
+    >
+      <path d="M12 3L2 20h20L12 3z" />
+      <path d="M12 10v4M12 17h.01" />
+    </svg>
+  );
+}
+
+// 期日の表示。「今日まで」「期限切れ」は色だけでなくアイコンと文字で示す
+function DueBadge({
+  dueDate,
+  today,
+  done,
+}: {
+  dueDate: string;
+  today: string;
+  done: boolean;
+}) {
+  const date = formatDue(dueDate);
+  // 完了済みのタスクは急かさず、日付だけ出す
+  if (!done && dueDate < today) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-red-700 bg-red-50 px-2.5 py-0.5 text-base font-bold text-red-800 dark:border-red-400 dark:bg-red-950 dark:text-red-100">
+        <AlertIcon />
+        期限切れ
+        <span className="font-medium">{date}</span>
+      </span>
+    );
+  }
+  if (!done && dueDate === today) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-amber-600 bg-amber-50 px-2.5 py-0.5 text-base font-bold text-amber-900 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100">
+        <ClockIcon />
+        今日まで
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-300 bg-white px-2.5 py-0.5 text-base font-medium text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+      <CalendarIcon />
+      {date}まで
+    </span>
+  );
 }
 
 function BriefcaseIcon() {
@@ -185,6 +318,10 @@ export default function TodoApp() {
   const [input, setInput] = useState("");
   const [category, setCategory] = useState<Category>("work");
   const [filter, setFilter] = useState<Filter>("all");
+  const [dueDate, setDueDate] = useState("");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("added");
+  // 「今日」はブラウザ側で決める（サーバーとの時刻差・日付またぎに対応）
+  const [today, setToday] = useState("");
   // localStorage の読み込みが終わるまで保存しないためのフラグ
   const [loaded, setLoaded] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -205,8 +342,34 @@ export default function TodoApp() {
     } catch {
       // 壊れたデータは無視して空リストで始める
     }
+    try {
+      if (localStorage.getItem(SORT_KEY) === "due") setSortOrder("due");
+    } catch {
+      // 読めなければ追加順のまま
+    }
+    setToday(todayString());
     setLoaded(true);
   }, []);
+
+  // アプリに戻ってきたとき、日付が変わっていれば「今日」を更新する
+  useEffect(() => {
+    const refresh = () => setToday(todayString());
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
+  const changeSortOrder = (order: SortOrder) => {
+    setSortOrder(order);
+    try {
+      localStorage.setItem(SORT_KEY, order);
+    } catch {
+      // 保存できなくても並べ替え自体はできる
+    }
+  };
 
   // todos が変わるたびに localStorage へ保存する
   useEffect(() => {
@@ -237,9 +400,16 @@ export default function TodoApp() {
     if (!trimmed) return; // 空（空白のみ含む）は追加しない
     setTodos((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), text: trimmed, done: false, category },
+      {
+        id: crypto.randomUUID(),
+        text: trimmed,
+        done: false,
+        category,
+        ...(isDateString(dueDate) ? { dueDate } : {}),
+      },
     ]);
     setInput("");
+    setDueDate(""); // 期日はタスクごとに違うので毎回リセット
     // 絞り込み中で追加したタスクが見えなくなる場合は、そのカテゴリに切り替える
     if (filter !== "all" && filter !== category) setFilter(category);
     showToast(`「${CATEGORIES[category].label}」に追加しました`);
@@ -265,8 +435,10 @@ export default function TodoApp() {
     showToast("削除しました");
   };
 
-  const visibleTodos =
+  const filteredTodos =
     filter === "all" ? todos : todos.filter((t) => t.category === filter);
+  const visibleTodos =
+    sortOrder === "due" ? sortByDue(filteredTodos) : filteredTodos;
   const remaining = visibleTodos.filter((t) => !t.done).length;
 
   const filterOptions: { id: Filter; label: string }[] = [
@@ -301,6 +473,34 @@ export default function TodoApp() {
         >
           追加
         </button>
+      </div>
+
+      {/* 期日（なくても OK） */}
+      <div className="mb-4">
+        <label
+          htmlFor="due-date"
+          className="mb-2 block text-base font-medium text-zinc-800 dark:text-zinc-200"
+        >
+          期日<span className="font-normal">（なくても OK）</span>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            id="due-date"
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="min-h-12 rounded-xl border-2 border-zinc-300 bg-white px-4 text-base text-zinc-900 outline-none transition-colors focus:border-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50 dark:[color-scheme:dark] dark:focus:border-blue-400"
+          />
+          {dueDate && (
+            <button
+              type="button"
+              onClick={() => setDueDate("")}
+              className="min-h-11 min-w-11 cursor-pointer rounded-xl px-4 text-base font-medium text-zinc-700 underline underline-offset-4 transition hover:bg-zinc-100 active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              期日をなしにする
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 追加するタスクのカテゴリ（1つ選ぶ） */}
@@ -372,6 +572,41 @@ export default function TodoApp() {
               })}
             </div>
 
+            {/* 並び順 */}
+            <div
+              role="group"
+              aria-label="並び順"
+              className="mb-4 flex flex-wrap items-center gap-2"
+            >
+              <span className="text-base text-zinc-700 dark:text-zinc-300">
+                並び順：
+              </span>
+              {(
+                [
+                  { id: "added", label: "追加順" },
+                  { id: "due", label: "期日が近い順" },
+                ] as const
+              ).map(({ id, label }) => {
+                const active = sortOrder === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => changeSortOrder(id)}
+                    aria-pressed={active}
+                    className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-xl border-2 px-4 text-base font-medium transition active:scale-95 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                      active
+                        ? "border-zinc-900 bg-zinc-900 font-bold text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                        : "border-zinc-300 bg-white text-zinc-800 hover:border-zinc-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                    }`}
+                  >
+                    {active && <CheckIcon />}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
             {visibleTodos.length === 0 ? (
               <p className="py-12 text-center text-base text-zinc-600 dark:text-zinc-400">
                 「{filterOptions.find((f) => f.id === filter)?.label}
@@ -401,9 +636,20 @@ export default function TodoApp() {
                         </span>
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col items-start gap-1 py-1">
-                        {/* 既存のカテゴリなしタスクはバッジを出さない */}
-                        {todo.category && (
-                          <CategoryBadge category={todo.category} />
+                        {/* 既存のカテゴリなし・期日なしタスクはバッジを出さない */}
+                        {(todo.category || todo.dueDate) && (
+                          <span className="flex flex-wrap gap-1.5">
+                            {todo.category && (
+                              <CategoryBadge category={todo.category} />
+                            )}
+                            {todo.dueDate && today && (
+                              <DueBadge
+                                dueDate={todo.dueDate}
+                                today={today}
+                                done={todo.done}
+                              />
+                            )}
+                          </span>
                         )}
                         <span
                           className={`min-w-0 break-words text-base leading-relaxed ${
